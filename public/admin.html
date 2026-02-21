@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Poker Clock Admin</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+  <main class="admin-layout">
+
+    <section class="panel">
+      <h1>Poker Tournament Clock - Admin</h1>
+
+      <label>
+        Tournament Name
+        <input id="tournamentName" type="text" placeholder="Tournament Name" />
+      </label>
+
+      <div class="grid-two">
+
+        <label>
+          Players Total
+          <input id="playersTotal" type="number" min="0" value="0" />
+        </label>
+
+        <label>
+          Players Left
+          <input id="playersLeft" type="number" min="0" value="0" />
+        </label>
+
+        <label>
+          Starting Stack
+          <input id="startingStack" type="number" min="0" value="20000" />
+        </label>
+
+        <label>
+          Alert times (sec)
+          <input id="alertTimes" type="text" value="60,10" placeholder="e.g. 60,10" />
+        </label>
+
+      </div>
+
+      <div class="preset-row">
+        <label>
+          Preset
+          <select id="presetSelect"></select>
+        </label>
+        <button id="applyPresetBtn">Apply Preset</button>
+      </div>
+
+      <div class="button-row">
+        <button id="saveSetup">Save Setup</button>
+        <button id="startBtn" class="success">Start</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="resumeBtn">Resume</button>
+        <button id="resetBtn" class="danger">Reset</button>
+        <button id="prevLevelBtn">Prev Level</button>
+        <button id="nextLevelBtn">Next Level</button>
+      </div>
+
+      <div class="status-box">
+        <p><strong>Status:</strong> <span id="statusText">stopped</span></p>
+        <p><strong>Current Level:</strong> <span id="currentLevelText">-</span></p>
+        <p><strong>Remaining:</strong> <span id="remainingText">00:00</span></p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="levels-header">
+        <h2>Levels</h2>
+        <button id="addLevelBtn">+ Add Level</button>
+      </div>
+
+      <table id="levelsTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Duration (min)</th>
+            <th>SB</th>
+            <th>BB</th>
+            <th>Ante</th>
+            <th>Break?</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>
+

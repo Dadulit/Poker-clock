@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Poker Tournament Display</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="display-layout">
+      <div class="display-top-row">
+        <h1 id="displayTournamentName">Poker Tournament</h1>
+        <button id="fullscreenBtn">Toggle Fullscreen</button>
+      </div>
+
+      <div class="display-status" id="displayStatus">Stopped</div>
+      <div class="timer" id="displayTimer">00:00</div>
+
+      <section class="panel level-card level-card-current">
+        <h2>Current Level</h2>
+        <p id="currentLevelLabel">-</p>
+        <p id="currentBlinds">SB/BB: - / -</p>
+        <p id="currentAnte">Ante: -</p>
+      </section>
+
+      <section class="panel level-card level-card-next">
+        <h2>Next Level</h2>
+        <p id="nextLevelLabel">-</p>
+        <p id="nextBlinds">SB/BB: - / -</p>
+        <p id="nextAnte">Ante: -</p>
+      </section>
+
+      <div class="players-line">
+        Players: <span id="displayPlayersLeft">0</span> / <span id="displayPlayersTotal">0</span>
+      </div>
+      <div class="players-line">
+        Avg stack: <span id="displayAvgStack">0</span>
+      </div>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/display.js"></script>
+  </body>
+</html>
+
