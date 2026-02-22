@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const http = require('http');
@@ -8,6 +9,11 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 const defaultLevels = [
   { durationSec: 600, sb: 100, bb: 200, ante: 0, isBreak: false },
@@ -16,33 +22,69 @@ const defaultLevels = [
   { durationSec: 600, sb: 300, bb: 600, ante: 50, isBreak: false }
 ];
 
-const state = {
+const baseState = {
   tournamentName: 'Poker Tournament',
+  subtitle: 'Main Event',
   levels: defaultLevels,
   currentLevelIndex: 0,
   remainingSec: defaultLevels[0].durationSec,
   status: 'stopped',
-  playersTotal: 0,
-  playersLeft: 0,
+  startTimestamp: null,
+  pausedOffset: 0,
+  playersTotal: 100,
+  playersLeft: 100,
+  reentriesCount: 0,
+  addonsCount: 0,
+  startingStack: 20000,
+  addonStack: 10000,
+  lateRegEndLevel: 0,
+  showChipsInPlay: true,
+  showAvgStack: true,
   alertSeconds: [60, 10],
-  startingStack: 20000
+  soundsEnabled: true,
+  soundMap: {
+    alert60: 'beep3',
+    alert10: 'triangle',
+    levelChange: 'levelup',
+    breakStart: 'gong',
+    breakEnd: 'bell'
+  },
+  backgroundPreset: 'nebula',
+  backgroundCustom: '',
+  overlayDim: 35,
+  theme: 'bulletBlue',
+  logoPath: ''
 };
 
+const state = { ...baseState };
 let ticker = null;
+let lastTickSecond = null;
 
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+app.get('/display', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'display.html'));
+});
 
 function getCurrentLevel() {
   return state.levels[state.currentLevelIndex] || null;
 }
 
+function getNextLevel() {
+  return state.levels[state.currentLevelIndex + 1] || null;
+}
+
 function normalizeLevel(level) {
   return {
-    durationSec: Math.max(60, Number(level.durationSec) || 600),
-    sb: Math.max(0, Number(level.sb) || 0),
-    bb: Math.max(0, Number(level.bb) || 0),
-    ante: Math.max(0, Number(level.ante) || 0),
+    durationSec: Math.max(60, Math.floor(Number(level.durationSec) || 600)),
+    sb: Math.max(0, Math.floor(Number(level.sb) || 0)),
+    bb: Math.max(0, Math.floor(Number(level.bb) || 0)),
+    ante: Math.max(0, Math.floor(Number(level.ante) || 0)),
     isBreak: Boolean(level.isBreak)
   };
 }
@@ -52,49 +94,51 @@ function normalizeAlertSeconds(alertSeconds) {
     return [60, 10];
   }
 
-  const normalized = [...new Set(alertSeconds
+  return [...new Set(alertSeconds
     .map((value) => Math.floor(Number(value)))
     .filter((value) => Number.isInteger(value) && value > 0))]
     .sort((a, b) => b - a);
-
-  return normalized;
 }
 
-function applyLevelDefaults() {
+function applyStateDefaults() {
   if (!Array.isArray(state.levels) || state.levels.length === 0) {
     state.levels = [{ durationSec: 600, sb: 100, bb: 200, ante: 0, isBreak: false }];
   }
 
   state.levels = state.levels.map(normalizeLevel);
   state.alertSeconds = normalizeAlertSeconds(state.alertSeconds);
+  state.playersTotal = Math.max(0, Math.floor(Number(state.playersTotal) || 0));
+  state.playersLeft = Math.max(0, Math.floor(Number(state.playersLeft) || 0));
+  state.reentriesCount = Math.max(0, Math.floor(Number(state.reentriesCount) || 0));
+  state.addonsCount = Math.max(0, Math.floor(Number(state.addonsCount) || 0));
   state.startingStack = Math.max(0, Math.floor(Number(state.startingStack) || 0));
-
-  if (state.currentLevelIndex >= state.levels.length) {
-    state.currentLevelIndex = state.levels.length - 1;
-  }
-
-  if (state.currentLevelIndex < 0) {
-    state.currentLevelIndex = 0;
-  }
-
-  const level = getCurrentLevel();
-  if (!level) {
-    state.currentLevelIndex = 0;
-    state.remainingSec = 0;
-    return;
-  }
-
-  if (state.remainingSec <= 0 || state.remainingSec > level.durationSec) {
-    state.remainingSec = level.durationSec;
-  }
+  state.addonStack = Math.max(0, Math.floor(Number(state.addonStack) || 0));
+  state.overlayDim = Math.min(70, Math.max(0, Math.floor(Number(state.overlayDim) || 0)));
+  state.lateRegEndLevel = Math.max(0, Math.floor(Number(state.lateRegEndLevel) || 0));
+  state.currentLevelIndex = Math.min(Math.max(0, state.currentLevelIndex), state.levels.length - 1);
 
   if (state.playersLeft > state.playersTotal) {
     state.playersLeft = state.playersTotal;
   }
+
+  if (!getCurrentLevel()) {
+    state.currentLevelIndex = 0;
+    state.remainingSec = 0;
+  }
+}
+
+function calcRunningRemainingSec(nowMs = Date.now()) {
+  const level = getCurrentLevel();
+  if (!level) {
+    return 0;
+  }
+
+  const elapsedSec = Math.floor(((nowMs - state.startTimestamp) / 1000) + state.pausedOffset);
+  return Math.max(0, level.durationSec - elapsedSec);
 }
 
 function emitState() {
-  applyLevelDefaults();
+  applyStateDefaults();
   io.emit('state:update', state);
 }
 
@@ -103,184 +147,281 @@ function stopTicker() {
     clearInterval(ticker);
     ticker = null;
   }
+  lastTickSecond = null;
 }
 
-function moveToLevel(nextIndex, shouldStopWhenDone = true) {
-  if (nextIndex >= state.levels.length) {
+function emitSoundEvent(type) {
+  io.emit('sound:event', { type, soundId: state.soundMap[type] || 'beep3' });
+}
+
+function goToLevel(index, mode = 'manual') {
+  if (index < 0) {
+    index = 0;
+  }
+
+  if (index >= state.levels.length) {
+    state.status = 'stopped';
     state.currentLevelIndex = state.levels.length - 1;
-    const current = getCurrentLevel();
-    state.remainingSec = current ? current.durationSec : 0;
-    if (shouldStopWhenDone) {
-      state.status = 'stopped';
-      stopTicker();
-    }
+    const last = getCurrentLevel();
+    state.remainingSec = last ? last.durationSec : 0;
+    state.startTimestamp = null;
+    state.pausedOffset = 0;
+    stopTicker();
     emitState();
     return false;
   }
 
-  if (nextIndex < 0) {
-    nextIndex = 0;
-  }
+  const prev = getCurrentLevel();
+  const wasBreak = Boolean(prev && prev.isBreak);
 
-  state.currentLevelIndex = nextIndex;
+  state.currentLevelIndex = index;
   const current = getCurrentLevel();
   state.remainingSec = current ? current.durationSec : 0;
+
+  if (state.status === 'running') {
+    state.startTimestamp = Date.now();
+    state.pausedOffset = 0;
+    lastTickSecond = null;
+  } else {
+    state.startTimestamp = null;
+    state.pausedOffset = 0;
+  }
+
+  if (mode !== 'reset') {
+    emitSoundEvent('levelChange');
+    const isBreak = Boolean(current && current.isBreak);
+    if (!wasBreak && isBreak) {
+      emitSoundEvent('breakStart');
+    }
+    if (wasBreak && !isBreak) {
+      emitSoundEvent('breakEnd');
+    }
+  }
+
   emitState();
   return true;
+}
+
+function tick() {
+  if (state.status !== 'running') {
+    return;
+  }
+
+  const remaining = calcRunningRemainingSec();
+  state.remainingSec = remaining;
+
+  if (remaining !== lastTickSecond) {
+    if (state.alertSeconds.includes(remaining)) {
+      if (remaining === 60) {
+        emitSoundEvent('alert60');
+      } else if (remaining === 10) {
+        emitSoundEvent('alert10');
+      } else {
+        emitSoundEvent('alert10');
+      }
+    }
+    lastTickSecond = remaining;
+  }
+
+  if (remaining <= 0) {
+    goToLevel(state.currentLevelIndex + 1, 'auto');
+    return;
+  }
+
+  emitState();
 }
 
 function startTicker() {
   if (ticker) {
     return;
   }
+  ticker = setInterval(tick, 1000);
+}
 
-  ticker = setInterval(() => {
-    if (state.status !== 'running') {
-      return;
+function updateStateFromPayload(payload = {}) {
+  if (typeof payload.tournamentName === 'string') {
+    state.tournamentName = payload.tournamentName.trim() || baseState.tournamentName;
+  }
+  if (typeof payload.subtitle === 'string') {
+    state.subtitle = payload.subtitle.trim();
+  }
+  if (Array.isArray(payload.levels)) {
+    state.levels = payload.levels.map(normalizeLevel);
+  }
+
+  [
+    'playersTotal',
+    'playersLeft',
+    'reentriesCount',
+    'addonsCount',
+    'startingStack',
+    'addonStack',
+    'overlayDim',
+    'lateRegEndLevel'
+  ].forEach((key) => {
+    if (typeof payload[key] === 'number') {
+      state[key] = payload[key];
     }
+  });
 
-    state.remainingSec -= 1;
-
-    if (state.alertSeconds.includes(state.remainingSec)) {
-      io.emit('sound:alert', {
-        remainingSec: state.remainingSec,
-        currentLevelIndex: state.currentLevelIndex
-      });
+  ['showChipsInPlay', 'showAvgStack', 'soundsEnabled'].forEach((key) => {
+    if (typeof payload[key] === 'boolean') {
+      state[key] = payload[key];
     }
+  });
 
-    if (state.remainingSec <= 0) {
-      moveToLevel(state.currentLevelIndex + 1, true);
-      return;
+  ['backgroundPreset', 'backgroundCustom', 'theme', 'logoPath'].forEach((key) => {
+    if (typeof payload[key] === 'string') {
+      state[key] = payload[key];
     }
+  });
 
-    emitState();
-  }, 1000);
+  if (Array.isArray(payload.alertSeconds)) {
+    state.alertSeconds = normalizeAlertSeconds(payload.alertSeconds);
+  }
+
+  if (payload.soundMap && typeof payload.soundMap === 'object') {
+    state.soundMap = {
+      ...state.soundMap,
+      ...payload.soundMap
+    };
+  }
+
+  applyStateDefaults();
+}
+
+function saveDataUrlToFile(dataUrl, prefix) {
+  const match = String(dataUrl).match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/i);
+  if (!match) {
+    return '';
+  }
+
+  const extMap = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/webp': 'webp'
+  };
+
+  const mime = match[1].toLowerCase();
+  const ext = extMap[mime] || 'png';
+  const fileName = `${prefix}-${Date.now()}.${ext}`;
+  const relativePath = `/uploads/${fileName}`;
+  const fullPath = path.join(uploadsDir, fileName);
+
+  fs.writeFileSync(fullPath, Buffer.from(match[3], 'base64'));
+  return relativePath;
 }
 
 io.on('connection', (socket) => {
   socket.emit('state:update', state);
 
+  socket.on('admin:updateState', (payload = {}) => {
+    updateStateFromPayload(payload);
+    emitState();
+  });
+
   socket.on('admin:initState', (payload = {}) => {
-    if (typeof payload.tournamentName === 'string') {
-      state.tournamentName = payload.tournamentName.trim() || 'Poker Tournament';
-    }
-
-    if (Array.isArray(payload.levels)) {
-      state.levels = payload.levels.map(normalizeLevel);
-    }
-
-    if (typeof payload.playersTotal === 'number') {
-      state.playersTotal = Math.max(0, payload.playersTotal);
-    }
-
-    if (typeof payload.playersLeft === 'number') {
-      state.playersLeft = Math.max(0, payload.playersLeft);
-    }
-
-    if (Array.isArray(payload.alertSeconds)) {
-      state.alertSeconds = normalizeAlertSeconds(payload.alertSeconds);
-    }
-
-    if (typeof payload.startingStack === 'number') {
-      state.startingStack = Math.max(0, Math.floor(payload.startingStack));
-    }
-
+    updateStateFromPayload(payload);
     state.currentLevelIndex = 0;
     state.status = 'stopped';
-    const first = getCurrentLevel();
-    state.remainingSec = first ? first.durationSec : 0;
+    state.startTimestamp = null;
+    state.pausedOffset = 0;
+    state.remainingSec = getCurrentLevel() ? getCurrentLevel().durationSec : 0;
     stopTicker();
     emitState();
   });
 
   socket.on('admin:start', () => {
-    const level = getCurrentLevel();
-    if (!level) {
+    if (!getCurrentLevel()) {
       return;
     }
 
-    if (state.status === 'stopped') {
-      state.remainingSec = level.durationSec;
-    }
-
     state.status = 'running';
+    state.startTimestamp = Date.now();
+    state.pausedOffset = 0;
+    lastTickSecond = null;
     startTicker();
     emitState();
   });
 
   socket.on('admin-pause', () => {
-    if (state.status === 'running') {
-      state.status = 'paused';
-      emitState();
+    if (state.status !== 'running') {
+      return;
     }
+
+    state.remainingSec = calcRunningRemainingSec();
+    const level = getCurrentLevel();
+    state.pausedOffset = level ? level.durationSec - state.remainingSec : 0;
+    state.startTimestamp = null;
+    state.status = 'paused';
+    emitState();
   });
 
   socket.on('admin-resume', () => {
-    if (state.status === 'paused') {
-      state.status = 'running';
-      startTicker();
-      emitState();
+    if (state.status !== 'paused') {
+      return;
     }
+
+    state.status = 'running';
+    state.startTimestamp = Date.now();
+    lastTickSecond = null;
+    startTicker();
+    emitState();
   });
 
   socket.on('admin-reset', () => {
-    state.currentLevelIndex = 0;
     state.status = 'stopped';
-    const first = getCurrentLevel();
-    state.remainingSec = first ? first.durationSec : 0;
+    state.currentLevelIndex = 0;
+    state.startTimestamp = null;
+    state.pausedOffset = 0;
+    state.remainingSec = getCurrentLevel() ? getCurrentLevel().durationSec : 0;
     stopTicker();
     emitState();
   });
 
   socket.on('admin:nextLevel', () => {
-    const moved = moveToLevel(state.currentLevelIndex + 1, false);
-    if (!moved) {
-      return;
-    }
-
-    if (state.status === 'running') {
-      startTicker();
-    }
+    goToLevel(state.currentLevelIndex + 1, 'manual');
   });
 
   socket.on('admin:prevLevel', () => {
-    moveToLevel(state.currentLevelIndex - 1, false);
+    goToLevel(state.currentLevelIndex - 1, 'manual');
   });
 
-  socket.on('admin-setPlayers', (payload = {}) => {
-    if (typeof payload.playersTotal === 'number') {
-      state.playersTotal = Math.max(0, payload.playersTotal);
-    }
 
-    if (typeof payload.playersLeft === 'number') {
-      state.playersLeft = Math.max(0, payload.playersLeft);
-    }
-
-    if (state.playersLeft > state.playersTotal) {
-      state.playersLeft = state.playersTotal;
-    }
-
-    emitState();
+  socket.on('sound:event', (payload = {}) => {
+    io.emit('sound:event', {
+      type: payload.type || 'levelChange',
+      soundId: payload.soundId || state.soundMap.levelChange
+    });
   });
 
-  socket.on('admin-updateLevel', (payload = {}) => {
-    const { index, level } = payload;
-
-    if (!Number.isInteger(index) || index < 0 || index >= state.levels.length || !level) {
+  socket.on('admin:uploadAsset', (payload = {}) => {
+    const { type, dataUrl } = payload;
+    if (!dataUrl || !type) {
       return;
     }
 
-    state.levels[index] = normalizeLevel(level);
-    const current = getCurrentLevel();
-    if (current && index === state.currentLevelIndex && state.remainingSec > current.durationSec) {
-      state.remainingSec = current.durationSec;
+    if (type === 'logo') {
+      const relativePath = saveDataUrlToFile(dataUrl, 'logo');
+      if (relativePath) {
+        state.logoPath = relativePath;
+        emitState();
+      }
+      return;
     }
 
-    emitState();
+    if (type === 'background') {
+      const relativePath = saveDataUrlToFile(dataUrl, 'bg');
+      if (relativePath) {
+        state.backgroundCustom = relativePath;
+        state.backgroundPreset = 'custom';
+        emitState();
+      }
+    }
   });
 });
 
 server.listen(PORT, () => {
   console.log(`Poker clock running on http://localhost:${PORT}`);
 });
-

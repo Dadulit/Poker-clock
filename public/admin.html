@@ -1,98 +1,178 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Poker Clock Admin</title>
-  <link rel="stylesheet" href="/styles.css" />
-</head>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Poker Clock Admin</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="admin-layout">
+      <section class="panel">
+        <h1>Poker Tournament Clock - Admin</h1>
+        <h2 class="section-title">Tournament</h2>
 
-<body>
-  <main class="admin-layout">
+        <div class="grid-two">
+          <label>
+            Tournament Name
+            <input id="tournamentName" type="text" />
+          </label>
+          <label>
+            Subtitle
+            <input id="subtitle" type="text" />
+          </label>
+          <label>
+            Late registration ends at level (0 = disabled)
+            <input id="lateRegEndLevel" type="number" min="0" value="0" />
+          </label>
+          <label>
+            Alert times (sec)
+            <input id="alertTimes" type="text" value="60,10" />
+          </label>
+        </div>
+      </section>
 
-    <section class="panel">
-      <h1>Poker Tournament Clock - Admin</h1>
+      <section class="panel">
+        <h2 class="section-title">Players / Stacks</h2>
+        <div class="grid-two">
+          <label>
+            Starting stack
+            <input id="startingStack" type="number" min="0" />
+          </label>
+          <label>
+            Add-on stack
+            <input id="addonStack" type="number" min="0" />
+          </label>
+          <label>
+            Players total
+            <input id="playersTotal" type="number" min="0" />
+          </label>
+          <label>
+            Players left
+            <input id="playersLeft" type="number" min="0" />
+          </label>
+          <label>
+            Re-entries count
+            <input id="reentriesCount" type="number" min="0" />
+          </label>
+          <label>
+            Add-ons count
+            <input id="addonsCount" type="number" min="0" />
+          </label>
+          <div class="toggle-wrap">
+            <label><input id="showChipsInPlay" type="checkbox" checked /> Show chips in play</label>
+            <label><input id="showAvgStack" type="checkbox" checked /> Show average stack</label>
+          </div>
+        </div>
+      </section>
 
-      <label>
-        Tournament Name
-        <input id="tournamentName" type="text" placeholder="Tournament Name" />
-      </label>
+      <section class="panel timer-controls-panel">
+        <h2 class="section-title">Timer Controls</h2>
+        <div class="button-row timer-controls">
+          <button id="saveSetup">Save Setup</button>
+          <button id="startBtn" class="success">Start</button>
+          <button id="pauseBtn">Pause</button>
+          <button id="resumeBtn">Resume</button>
+          <button id="prevLevelBtn">Prev Level</button>
+          <button id="nextLevelBtn">Next Level</button>
+          <button id="resetBtn" class="danger">Reset</button>
+        </div>
+        <div class="status-box">
+          <p><strong>Status:</strong> <span id="statusText">stopped</span></p>
+          <p><strong>Current Level:</strong> <span id="currentLevelText">-</span></p>
+          <p><strong>Remaining:</strong> <span id="remainingText">00:00</span></p>
+        </div>
+      </section>
 
-      <div class="grid-two">
+      <section class="panel">
+        <div class="levels-header">
+          <h2 class="section-title">Levels</h2>
+          <div class="button-row tight">
+            <button id="addLevelBtn">Add level</button>
+            <button id="addBreakBtn">Add break</button>
+          </div>
+        </div>
 
+        <table id="levelsTable">
+          <thead>
+            <tr>
+              <th>Level</th>
+              <th>Duration (min)</th>
+              <th>SB</th>
+              <th>BB</th>
+              <th>Ante</th>
+              <th>Break</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+
+        <div id="levelsCards" class="levels-cards"></div>
+      </section>
+
+      <section class="panel">
+        <h2 class="section-title">Sounds</h2>
+        <div class="sound-grid">
+          <label><input id="soundsEnabled" type="checkbox" checked /> Enable sounds</label>
+          <div class="sound-row"><span>Alert 60s</span><select id="sound-alert60"></select><button data-test-sound="alert60">Play</button></div>
+          <div class="sound-row"><span>Alert 10s</span><select id="sound-alert10"></select><button data-test-sound="alert10">Play</button></div>
+          <div class="sound-row"><span>Level change</span><select id="sound-levelChange"></select><button data-test-sound="levelChange">Play</button></div>
+          <div class="sound-row"><span>Break start</span><select id="sound-breakStart"></select><button data-test-sound="breakStart">Play</button></div>
+          <div class="sound-row"><span>Break end</span><select id="sound-breakEnd"></select><button data-test-sound="breakEnd">Play</button></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="section-title">Background</h2>
+        <div class="grid-two">
+          <label>
+            Preset background
+            <select id="backgroundPreset"></select>
+          </label>
+          <label>
+            Overlay dim (0-70%)
+            <input id="overlayDim" type="range" min="0" max="70" value="35" />
+          </label>
+          <label>
+            Upload custom background
+            <input id="backgroundUpload" type="file" accept="image/png,image/jpeg,image/webp" />
+          </label>
+          <div class="preview-box"><img id="backgroundPreview" alt="background preview" /></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="section-title">Theme</h2>
         <label>
-          Players Total
-          <input id="playersTotal" type="number" min="0" value="0" />
+          Theme preset
+          <select id="themeSelect"></select>
         </label>
+      </section>
 
-        <label>
-          Players Left
-          <input id="playersLeft" type="number" min="0" value="0" />
-        </label>
+      <section class="panel">
+        <h2 class="section-title">Logo</h2>
+        <div class="grid-two">
+          <label>
+            Upload logo
+            <input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp" />
+          </label>
+          <div class="preview-box logo"><img id="logoPreview" alt="logo preview" /></div>
+        </div>
+      </section>
+    </main>
 
-        <label>
-          Starting Stack
-          <input id="startingStack" type="number" min="0" value="20000" />
-        </label>
+    <div class="mobile-sticky-controls">
+      <button id="stickySave">Save</button>
+      <button id="stickyStart" class="success">Start</button>
+      <button id="stickyPause">Pause</button>
+      <button id="stickyResume">Resume</button>
+      <button id="stickyPrev">Prev</button>
+      <button id="stickyNext">Next</button>
+      <button id="stickyReset" class="danger">Reset</button>
+    </div>
 
-        <label>
-          Alert times (sec)
-          <input id="alertTimes" type="text" value="60,10" placeholder="e.g. 60,10" />
-        </label>
-
-      </div>
-
-      <div class="preset-row">
-        <label>
-          Preset
-          <select id="presetSelect"></select>
-        </label>
-        <button id="applyPresetBtn">Apply Preset</button>
-      </div>
-
-      <div class="button-row">
-        <button id="saveSetup">Save Setup</button>
-        <button id="startBtn" class="success">Start</button>
-        <button id="pauseBtn">Pause</button>
-        <button id="resumeBtn">Resume</button>
-        <button id="resetBtn" class="danger">Reset</button>
-        <button id="prevLevelBtn">Prev Level</button>
-        <button id="nextLevelBtn">Next Level</button>
-      </div>
-
-      <div class="status-box">
-        <p><strong>Status:</strong> <span id="statusText">stopped</span></p>
-        <p><strong>Current Level:</strong> <span id="currentLevelText">-</span></p>
-        <p><strong>Remaining:</strong> <span id="remainingText">00:00</span></p>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="levels-header">
-        <h2>Levels</h2>
-        <button id="addLevelBtn">+ Add Level</button>
-      </div>
-
-      <table id="levelsTable">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Duration (min)</th>
-            <th>SB</th>
-            <th>BB</th>
-            <th>Ante</th>
-            <th>Break?</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-
-  </main>
-
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="/admin.js"></script>
-</body>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/admin.js"></script>
+  </body>
 </html>
-

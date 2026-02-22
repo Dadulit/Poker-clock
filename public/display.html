@@ -7,39 +7,57 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="display-layout">
-      <div class="display-top-row">
+    <div id="displayBg" class="display-bg"></div>
+    <div id="displayOverlay" class="display-overlay"></div>
+
+    <main class="display-shell">
+      <aside class="display-col left">
+        <img id="displayLogo" class="display-logo" alt="Logo" />
+        <section class="panel payouts">
+          <h3>Payouts</h3>
+          <ul>
+            <li>1st — TBD</li>
+            <li>2nd — TBD</li>
+            <li>3rd — TBD</li>
+          </ul>
+        </section>
+      </aside>
+
+      <section class="display-col center">
         <h1 id="displayTournamentName">Poker Tournament</h1>
-        <button id="fullscreenBtn">Toggle Fullscreen</button>
-      </div>
-
-      <div class="display-status" id="displayStatus">Stopped</div>
-      <div class="timer" id="displayTimer">00:00</div>
-
-      <section class="panel level-card level-card-current">
-        <h2>Current Level</h2>
-        <p id="currentLevelLabel">-</p>
-        <p id="currentBlinds">SB/BB: - / -</p>
-        <p id="currentAnte">Ante: -</p>
+        <p id="displaySubtitle" class="subtitle">Main Event</p>
+        <div id="displayTimer" class="timer">00:00</div>
+        <div id="displayStatus" class="display-status">STOPPED</div>
+        <div id="lateRegLine" class="late-reg-line hidden"></div>
+        <div id="currentBlock" class="panel current-block">
+          <h2 id="currentLevelLabel">Level 1</h2>
+          <p id="currentBlinds">SB/BB: 100 / 200</p>
+          <p id="currentAnte">Ante: 0</p>
+        </div>
       </section>
 
-      <section class="panel level-card level-card-next">
-        <h2>Next Level</h2>
-        <p id="nextLevelLabel">-</p>
-        <p id="nextBlinds">SB/BB: - / -</p>
-        <p id="nextAnte">Ante: -</p>
-      </section>
-
-      <div class="players-line">
-        Players: <span id="displayPlayersLeft">0</span> / <span id="displayPlayersTotal">0</span>
-      </div>
-      <div class="players-line">
-        Avg stack: <span id="displayAvgStack">0</span>
-      </div>
+      <aside class="display-col right">
+        <section class="panel next-block">
+          <h3>Next</h3>
+          <p id="nextLevelLabel">Level 2</p>
+          <p id="nextBlinds">SB/BB: 200 / 400</p>
+          <p id="nextAnte">Ante: 0</p>
+        </section>
+        <section id="breakBlock" class="panel break-block hidden">
+          <h3>Break countdown</h3>
+          <p id="breakCountdown">00:00</p>
+        </section>
+      </aside>
     </main>
+
+    <footer class="bottom-bar">
+      <span>Players: <strong id="displayPlayersLeft">0</strong> / <strong id="displayPlayersTotal">0</strong></span>
+      <span>Re-entries: <strong id="displayReentries">0</strong></span>
+      <span id="chipsLine">Chips in play: <strong id="displayChips">0</strong></span>
+      <span id="avgLine">Average stack: <strong id="displayAvgStack">0</strong></span>
+    </footer>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/display.js"></script>
   </body>
 </html>
-
