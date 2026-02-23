@@ -20,4 +20,3 @@ node server.js
 - Theme system (CSS variables), background presets/custom upload, and logo upload.
 - Sound system with event-level sound mapping and live trigger support.
 - TV-optimized display layout with chips-in-play and average stack calculations.
-

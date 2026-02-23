@@ -22,13 +22,26 @@
             <input id="subtitle" type="text" />
           </label>
           <label>
+            Structure Preset
+            <select id="structurePreset"></select>
+          </label>
+          <label>
             Late registration ends at level (0 = disabled)
             <input id="lateRegEndLevel" type="number" min="0" value="0" />
           </label>
           <label>
             Alert times (sec)
-            <input id="alertTimes" type="text" value="60,10" />
+            <input id="alertTimes" type="text" value="60,30,10" />
           </label>
+          <label>
+            Payout preset
+            <select id="payoutPreset">
+              <option value="auto">Auto</option>
+              <option value="final9">Final Table (Top 9)</option>
+              <option value="top18">Large Field (Top 18)</option>
+            </select>
+          </label>
+          <label><input id="showPayouts" type="checkbox" /> Show payouts on display</label>
         </div>
       </section>
 
@@ -113,13 +126,23 @@
 
       <section class="panel">
         <h2 class="section-title">Sounds</h2>
-        <div class="sound-grid">
+        <div class="grid-two">
           <label><input id="soundsEnabled" type="checkbox" checked /> Enable sounds</label>
-          <div class="sound-row"><span>Alert 60s</span><select id="sound-alert60"></select><button data-test-sound="alert60">Play</button></div>
-          <div class="sound-row"><span>Alert 10s</span><select id="sound-alert10"></select><button data-test-sound="alert10">Play</button></div>
-          <div class="sound-row"><span>Level change</span><select id="sound-levelChange"></select><button data-test-sound="levelChange">Play</button></div>
-          <div class="sound-row"><span>Break start</span><select id="sound-breakStart"></select><button data-test-sound="breakStart">Play</button></div>
-          <div class="sound-row"><span>Break end</span><select id="sound-breakEnd"></select><button data-test-sound="breakEnd">Play</button></div>
+          <label><input id="enableAlerts" type="checkbox" checked /> Enable alerts</label>
+          <label><input id="enableLevelChangeSound" type="checkbox" checked /> Enable level change sound</label>
+          <label><input id="enableBreakSounds" type="checkbox" checked /> Enable break sounds</label>
+          <label>
+            Volume (0..1)
+            <input id="soundVolume" type="range" min="0" max="1" step="0.01" value="0.5" />
+          </label>
+        </div>
+
+        <div class="sound-grid">
+          <div class="sound-row"><span>Alert 60s</span><select id="sound-alert60"></select><button data-test-sound="alert60">Test alert</button></div>
+          <div class="sound-row"><span>Alert 10s</span><select id="sound-alert10"></select><button data-test-sound="alert10">Test alert</button></div>
+          <div class="sound-row"><span>Level change</span><select id="sound-levelChange"></select><button data-test-sound="levelChange">Test level</button></div>
+          <div class="sound-row"><span>Break start</span><select id="sound-breakStart"></select><button data-test-sound="breakStart">Test break</button></div>
+          <div class="sound-row"><span>Break end</span><select id="sound-breakEnd"></select><button data-test-sound="breakEnd">Test break</button></div>
         </div>
       </section>
 

@@ -16,15 +16,15 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 const defaultLevels = [
-  { durationSec: 600, sb: 100, bb: 200, ante: 0, isBreak: false },
-  { durationSec: 600, sb: 200, bb: 400, ante: 0, isBreak: false },
-  { durationSec: 300, sb: 0, bb: 0, ante: 0, isBreak: true },
-  { durationSec: 600, sb: 300, bb: 600, ante: 50, isBreak: false }
+  { durationSec: 1200, sb: 100, bb: 200, ante: 0, isBreak: false },
+  { durationSec: 1200, sb: 100, bb: 300, ante: 0, isBreak: false },
+  { durationSec: 1200, sb: 200, bb: 400, ante: 0, isBreak: false }
 ];
 
 const baseState = {
   tournamentName: 'Poker Tournament',
   subtitle: 'Main Event',
+  structurePreset: 'default',
   levels: defaultLevels,
   currentLevelIndex: 0,
   remainingSec: defaultLevels[0].durationSec,
@@ -38,10 +38,16 @@ const baseState = {
   startingStack: 20000,
   addonStack: 10000,
   lateRegEndLevel: 0,
+  payoutPreset: 'auto',
+  showPayouts: false,
   showChipsInPlay: true,
   showAvgStack: true,
   alertSeconds: [60, 10],
   soundsEnabled: true,
+  enableAlerts: true,
+  enableLevelChangeSound: true,
+  enableBreakSounds: true,
+  soundVolume: 0.5,
   soundMap: {
     alert60: 'beep3',
     alert10: 'triangle',
@@ -73,10 +79,6 @@ app.get('/display', (req, res) => {
 
 function getCurrentLevel() {
   return state.levels[state.currentLevelIndex] || null;
-}
-
-function getNextLevel() {
-  return state.levels[state.currentLevelIndex + 1] || null;
 }
 
 function normalizeLevel(level) {
@@ -114,6 +116,7 @@ function applyStateDefaults() {
   state.startingStack = Math.max(0, Math.floor(Number(state.startingStack) || 0));
   state.addonStack = Math.max(0, Math.floor(Number(state.addonStack) || 0));
   state.overlayDim = Math.min(70, Math.max(0, Math.floor(Number(state.overlayDim) || 0)));
+  state.soundVolume = Math.min(1, Math.max(0, Number(state.soundVolume) || 0));
   state.lateRegEndLevel = Math.max(0, Math.floor(Number(state.lateRegEndLevel) || 0));
   state.currentLevelIndex = Math.min(Math.max(0, state.currentLevelIndex), state.levels.length - 1);
 
@@ -132,7 +135,6 @@ function calcRunningRemainingSec(nowMs = Date.now()) {
   if (!level) {
     return 0;
   }
-
   const elapsedSec = Math.floor(((nowMs - state.startTimestamp) / 1000) + state.pausedOffset);
   return Math.max(0, level.durationSec - elapsedSec);
 }
@@ -151,7 +153,14 @@ function stopTicker() {
 }
 
 function emitSoundEvent(type) {
-  io.emit('sound:event', { type, soundId: state.soundMap[type] || 'beep3' });
+  if (!state.soundsEnabled) {
+    return;
+  }
+  io.emit('sound:event', {
+    type,
+    soundId: state.soundMap[type] || 'beep3',
+    volume: state.soundVolume
+  });
 }
 
 function goToLevel(index, mode = 'manual') {
@@ -188,12 +197,15 @@ function goToLevel(index, mode = 'manual') {
   }
 
   if (mode !== 'reset') {
-    emitSoundEvent('levelChange');
+    if (state.enableLevelChangeSound) {
+      emitSoundEvent('levelChange');
+    }
+
     const isBreak = Boolean(current && current.isBreak);
-    if (!wasBreak && isBreak) {
+    if (state.enableBreakSounds && !wasBreak && isBreak) {
       emitSoundEvent('breakStart');
     }
-    if (wasBreak && !isBreak) {
+    if (state.enableBreakSounds && wasBreak && !isBreak) {
       emitSoundEvent('breakEnd');
     }
   }
@@ -211,11 +223,9 @@ function tick() {
   state.remainingSec = remaining;
 
   if (remaining !== lastTickSecond) {
-    if (state.alertSeconds.includes(remaining)) {
+    if (state.enableAlerts && state.alertSeconds.includes(remaining)) {
       if (remaining === 60) {
         emitSoundEvent('alert60');
-      } else if (remaining === 10) {
-        emitSoundEvent('alert10');
       } else {
         emitSoundEvent('alert10');
       }
@@ -232,10 +242,9 @@ function tick() {
 }
 
 function startTicker() {
-  if (ticker) {
-    return;
+  if (!ticker) {
+    ticker = setInterval(tick, 1000);
   }
-  ticker = setInterval(tick, 1000);
 }
 
 function updateStateFromPayload(payload = {}) {
@@ -244,6 +253,9 @@ function updateStateFromPayload(payload = {}) {
   }
   if (typeof payload.subtitle === 'string') {
     state.subtitle = payload.subtitle.trim();
+  }
+  if (typeof payload.structurePreset === 'string') {
+    state.structurePreset = payload.structurePreset;
   }
   if (Array.isArray(payload.levels)) {
     state.levels = payload.levels.map(normalizeLevel);
@@ -257,20 +269,21 @@ function updateStateFromPayload(payload = {}) {
     'startingStack',
     'addonStack',
     'overlayDim',
-    'lateRegEndLevel'
+    'lateRegEndLevel',
+    'soundVolume'
   ].forEach((key) => {
     if (typeof payload[key] === 'number') {
       state[key] = payload[key];
     }
   });
 
-  ['showChipsInPlay', 'showAvgStack', 'soundsEnabled'].forEach((key) => {
+  ['showChipsInPlay', 'showAvgStack', 'soundsEnabled', 'showPayouts', 'enableAlerts', 'enableLevelChangeSound', 'enableBreakSounds'].forEach((key) => {
     if (typeof payload[key] === 'boolean') {
       state[key] = payload[key];
     }
   });
 
-  ['backgroundPreset', 'backgroundCustom', 'theme', 'logoPath'].forEach((key) => {
+  ['backgroundPreset', 'backgroundCustom', 'theme', 'logoPath', 'payoutPreset'].forEach((key) => {
     if (typeof payload[key] === 'string') {
       state[key] = payload[key];
     }
@@ -281,10 +294,7 @@ function updateStateFromPayload(payload = {}) {
   }
 
   if (payload.soundMap && typeof payload.soundMap === 'object') {
-    state.soundMap = {
-      ...state.soundMap,
-      ...payload.soundMap
-    };
+    state.soundMap = { ...state.soundMap, ...payload.soundMap };
   }
 
   applyStateDefaults();
@@ -296,13 +306,7 @@ function saveDataUrlToFile(dataUrl, prefix) {
     return '';
   }
 
-  const extMap = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/jpg': 'jpg',
-    'image/webp': 'webp'
-  };
-
+  const extMap = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp' };
   const mime = match[1].toLowerCase();
   const ext = extMap[mime] || 'png';
   const fileName = `${prefix}-${Date.now()}.${ext}`;
@@ -388,11 +392,11 @@ io.on('connection', (socket) => {
     goToLevel(state.currentLevelIndex - 1, 'manual');
   });
 
-
   socket.on('sound:event', (payload = {}) => {
     io.emit('sound:event', {
       type: payload.type || 'levelChange',
-      soundId: payload.soundId || state.soundMap.levelChange
+      soundId: payload.soundId || state.soundMap.levelChange,
+      volume: typeof payload.volume === 'number' ? payload.volume : state.soundVolume
     });
   });
 

@@ -25,20 +25,26 @@ const BACKGROUNDS = {
 
 const SOUND_PATTERNS = {
   beep3: [
-    { f: 960, d: 250, g: 0.22 }, { pause: 110 },
-    { f: 960, d: 250, g: 0.22 }, { pause: 110 },
-    { f: 960, d: 250, g: 0.22 }, { pause: 2000 }
+    { f: 960, d: 220, g: 0.25 }, { pause: 120 },
+    { f: 960, d: 220, g: 0.25 }, { pause: 120 },
+    { f: 960, d: 220, g: 0.25 }
   ],
-  gong: [{ f: 180, d: 2400, g: 0.26, type: 'triangle' }, { pause: 600 }],
-  bell: [{ f: 1200, d: 500, g: 0.25, type: 'triangle' }, { pause: 180 }, { f: 800, d: 500, g: 0.2, type: 'triangle' }, { pause: 1800 }],
-  triangle: [{ f: 700, d: 300, g: 0.2, type: 'triangle' }, { pause: 200 }, { f: 1000, d: 300, g: 0.2, type: 'triangle' }, { pause: 2200 }],
-  levelup: [{ f: 420, d: 230, g: 0.2 }, { pause: 80 }, { f: 620, d: 230, g: 0.2 }, { pause: 80 }, { f: 880, d: 450, g: 0.23 }, { pause: 2000 }]
+  gong: [{ f: 180, d: 3000, g: 0.28, type: 'triangle' }],
+  bell: [{ f: 1200, d: 700, g: 0.27, type: 'triangle' }, { pause: 220 }, { f: 820, d: 700, g: 0.22, type: 'triangle' }],
+  triangle: [{ f: 700, d: 400, g: 0.22, type: 'triangle' }, { pause: 220 }, { f: 1050, d: 400, g: 0.22, type: 'triangle' }],
+  levelup: [{ f: 420, d: 250, g: 0.2 }, { pause: 90 }, { f: 620, d: 250, g: 0.2 }, { pause: 90 }, { f: 900, d: 700, g: 0.24 }]
 };
+
+const PAYOUT_FINAL9 = [25, 17, 13, 10, 9, 8, 7, 6, 5];
+const PAYOUT_TOP18 = [23, 15, 11, 8.5, 7.5, 6.5, 5.5, 5, 4.5, 3, 2, 1.5, 1.5, 1.5, 1, 1, 1, 1];
 
 const el = {
   bg: document.getElementById('displayBg'),
   overlay: document.getElementById('displayOverlay'),
   logo: document.getElementById('displayLogo'),
+  enableSoundBtn: document.getElementById('enableSoundBtn'),
+  payoutsPanel: document.getElementById('payoutsPanel'),
+  payoutList: document.getElementById('payoutList'),
   tournamentName: document.getElementById('displayTournamentName'),
   subtitle: document.getElementById('displaySubtitle'),
   status: document.getElementById('displayStatus'),
@@ -64,6 +70,7 @@ const el = {
 
 let currentState = null;
 let audioContext = null;
+let audioUnlocked = false;
 
 function formatClock(totalSec) {
   const sec = Math.max(0, Number(totalSec) || 0);
@@ -72,22 +79,19 @@ function formatClock(totalSec) {
   return `${mm}:${ss}`;
 }
 
-
 function lateRegText(state) {
   const end = Number(state.lateRegEndLevel) || 0;
   if (end <= 0) {
     return '';
   }
-  if ((state.currentLevelIndex + 1) < end) {
+  if (state.currentLevelIndex < end) {
     return `Late reg: OPEN (ends at L${end})`;
   }
   return 'Late reg: CLOSED';
 }
 
 function chipsInPlay(state) {
-  return ((state.playersTotal || 0) * (state.startingStack || 0))
-    + ((state.reentriesCount || 0) * (state.startingStack || 0))
-    + ((state.addonsCount || 0) * (state.addonStack || 0));
+  return ((state.playersTotal || 0) + (state.reentriesCount || 0) + (state.addonsCount || 0)) * (state.startingStack || 0);
 }
 
 function avgStack(state) {
@@ -96,6 +100,41 @@ function avgStack(state) {
     return 0;
   }
   return Math.floor(chipsInPlay(state) / left);
+}
+
+function resolvePayoutPreset(state) {
+  if (state.payoutPreset === 'final9') {
+    return PAYOUT_FINAL9;
+  }
+  if (state.payoutPreset === 'top18') {
+    return PAYOUT_TOP18;
+  }
+  return (state.playersTotal || 0) >= 50 ? PAYOUT_TOP18 : PAYOUT_FINAL9;
+}
+
+function renderPayouts(state) {
+  if (!state.showPayouts) {
+    el.payoutsPanel.classList.add('hidden');
+    el.payoutList.innerHTML = '';
+    return;
+  }
+
+  const percentages = resolvePayoutPreset(state);
+  const pointsBank = ((state.playersTotal || 0) + (state.reentriesCount || 0)) * 100;
+  const raw = percentages.map((percent) => Math.round(pointsBank * percent / 100));
+  const sum = raw.reduce((acc, value) => acc + value, 0);
+  if (raw.length > 0) {
+    raw[0] += pointsBank - sum;
+  }
+
+  el.payoutList.innerHTML = '';
+  raw.forEach((value, index) => {
+    const li = document.createElement('li');
+    li.textContent = `${index + 1}. ${value} pts`;
+    el.payoutList.appendChild(li);
+  });
+
+  el.payoutsPanel.classList.remove('hidden');
 }
 
 function applyTheme(themeName) {
@@ -110,6 +149,7 @@ function applyBackground(state) {
     el.bg.style.backgroundImage = `url('${state.backgroundCustom}')`;
     return;
   }
+
   const bg = BACKGROUNDS[state.backgroundPreset] || BACKGROUNDS.nebula;
   el.bg.style.backgroundImage = bg.startsWith('linear-gradient') || bg.startsWith('radial-gradient') ? bg : `url('${bg}')`;
 }
@@ -121,8 +161,17 @@ function ensureAudioContext() {
   return audioContext;
 }
 
-function playPattern(soundId) {
-  if (!currentState?.soundsEnabled) {
+function unlockAudio() {
+  const ctx = ensureAudioContext();
+  ctx.resume().then(() => {
+    audioUnlocked = true;
+    el.enableSoundBtn.textContent = 'Sound Enabled';
+    el.enableSoundBtn.disabled = true;
+  });
+}
+
+function playPattern(soundId, volume = 0.5) {
+  if (!currentState?.soundsEnabled || !audioUnlocked) {
     return;
   }
 
@@ -140,7 +189,7 @@ function playPattern(soundId) {
     const gain = ctx.createGain();
     osc.type = step.type || 'sine';
     osc.frequency.value = step.f;
-    gain.gain.value = step.g || 0.18;
+    gain.gain.value = (step.g || 0.2) * Math.max(0, Math.min(1, volume));
 
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -150,8 +199,10 @@ function playPattern(soundId) {
   });
 }
 
+el.enableSoundBtn.addEventListener('click', unlockAudio);
+
 socket.on('sound:event', (payload = {}) => {
-  playPattern(payload.soundId || 'beep3');
+  playPattern(payload.soundId || 'beep3', typeof payload.volume === 'number' ? payload.volume : (currentState?.soundVolume || 0.5));
 });
 
 socket.on('state:update', (state) => {
@@ -213,4 +264,6 @@ socket.on('state:update', (state) => {
     el.lateRegLine.classList.add('hidden');
     el.lateRegLine.textContent = '';
   }
+
+  renderPayouts(state);
 });

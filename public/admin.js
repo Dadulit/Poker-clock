@@ -26,10 +26,52 @@ const THEMES = {
   redDark: 'Red Dark'
 };
 
+const STRUCTURE_PRESETS = {
+  default: {
+    label: 'Default (Bullet-style)',
+    startingStack: 20000,
+    levels: [
+      [100, 200], [100, 300], [200, 400], [300, 600], [400, 800], [500, 1000], [500, 1500], [1000, 2000], [1500, 3000], [2000, 4000],
+      [3000, 6000], [4000, 8000], [5000, 10000], [6000, 12000], [8000, 16000], [10000, 20000], [15000, 30000], [20000, 40000], [25000, 50000],
+      [30000, 60000], [40000, 80000], [50000, 100000]
+    ].map(([sb, bb]) => ({ durationSec: 20 * 60, sb, bb, ante: 0, isBreak: false }))
+  },
+  weekdayTurbo: {
+    label: 'Weekday Turbo (30k)',
+    startingStack: 30000,
+    levels: [
+      [100, 200], [200, 400], [300, 600], [400, 800], [500, 1000], [700, 1400], 'break',
+      [1000, 2000], [1500, 3000], [2000, 4000], [3000, 6000], [4000, 8000], [6000, 12000], 'break',
+      [8000, 16000], [10000, 20000], [15000, 30000], [20000, 40000], [30000, 60000], [40000, 80000]
+    ].map((entry) => (entry === 'break'
+      ? { durationSec: 10 * 60, sb: 0, bb: 0, ante: 0, isBreak: true }
+      : { durationSec: 15 * 60, sb: entry[0], bb: entry[1], ante: 0, isBreak: false }))
+  },
+  weekendDeep: {
+    label: 'Weekend Deep (50k)',
+    startingStack: 50000,
+    levels: [
+      [100, 200], [200, 400], [300, 600], [400, 800], [500, 1000], [700, 1400], 'break',
+      [1000, 2000], [1500, 3000], [2000, 4000], [3000, 6000], [4000, 8000], [6000, 12000], 'break',
+      [8000, 16000], [10000, 20000], [15000, 30000], [20000, 40000], [30000, 60000], [50000, 100000]
+    ].map((entry) => (entry === 'break'
+      ? { durationSec: 10 * 60, sb: 0, bb: 0, ante: 0, isBreak: true }
+      : { durationSec: 18 * 60, sb: entry[0], bb: entry[1], ante: 0, isBreak: false }))
+  },
+  custom: {
+    label: 'Custom',
+    startingStack: null,
+    levels: null
+  }
+};
+
 const ui = {
   tournamentName: document.getElementById('tournamentName'),
   subtitle: document.getElementById('subtitle'),
+  structurePreset: document.getElementById('structurePreset'),
   lateRegEndLevel: document.getElementById('lateRegEndLevel'),
+  payoutPreset: document.getElementById('payoutPreset'),
+  showPayouts: document.getElementById('showPayouts'),
   startingStack: document.getElementById('startingStack'),
   addonStack: document.getElementById('addonStack'),
   playersTotal: document.getElementById('playersTotal'),
@@ -45,6 +87,10 @@ const ui = {
   currentLevelText: document.getElementById('currentLevelText'),
   remainingText: document.getElementById('remainingText'),
   soundsEnabled: document.getElementById('soundsEnabled'),
+  enableAlerts: document.getElementById('enableAlerts'),
+  enableLevelChangeSound: document.getElementById('enableLevelChangeSound'),
+  enableBreakSounds: document.getElementById('enableBreakSounds'),
+  soundVolume: document.getElementById('soundVolume'),
   backgroundPreset: document.getElementById('backgroundPreset'),
   overlayDim: document.getElementById('overlayDim'),
   backgroundUpload: document.getElementById('backgroundUpload'),
@@ -55,6 +101,7 @@ const ui = {
 };
 
 let localState = null;
+let dragIndex = null;
 
 function formatClock(totalSec) {
   const sec = Math.max(0, Number(totalSec) || 0);
@@ -112,6 +159,13 @@ function initSelects() {
     option.textContent = label;
     ui.themeSelect.appendChild(option);
   });
+
+  Object.entries(STRUCTURE_PRESETS).forEach(([value, preset]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = preset.label;
+    ui.structurePreset.appendChild(option);
+  });
 }
 
 function moveLevel(index, dir) {
@@ -131,14 +185,57 @@ function deleteLevel(index) {
   emitInitState(localState.levels);
 }
 
+function insertBreakBelow(index) {
+  if (!localState) {
+    return;
+  }
+  localState.levels.splice(index + 1, 0, { durationSec: 600, sb: 0, bb: 0, ante: 0, isBreak: true });
+  emitInitState(localState.levels);
+}
+
+function reorderByDrop(fromIndex, toIndex) {
+  if (!localState || fromIndex === null || toIndex === null || fromIndex === toIndex) {
+    return;
+  }
+  const [item] = localState.levels.splice(fromIndex, 1);
+  localState.levels.splice(toIndex, 0, item);
+  emitInitState(localState.levels);
+}
+
+function bindDragHandlers(node, index) {
+  node.setAttribute('draggable', 'true');
+  node.dataset.index = String(index);
+
+  node.addEventListener('dragstart', (event) => {
+    dragIndex = index;
+    event.dataTransfer.effectAllowed = 'move';
+  });
+
+  node.addEventListener('dragover', (event) => {
+    event.preventDefault();
+  });
+
+  node.addEventListener('drop', (event) => {
+    event.preventDefault();
+    const targetIndex = Number(node.dataset.index);
+    reorderByDrop(dragIndex, targetIndex);
+  });
+
+  node.addEventListener('dragend', () => {
+    dragIndex = null;
+  });
+}
+
 function createCommonActions(container, index) {
   const up = container.querySelector('[data-action="up"]');
   const down = container.querySelector('[data-action="down"]');
   const del = container.querySelector('[data-action="delete"]');
+  const insertBreak = container.querySelector('[data-action="insertBreak"]');
 
   up?.addEventListener('click', () => moveLevel(index, -1));
   down?.addEventListener('click', () => moveLevel(index, 1));
   del?.addEventListener('click', () => deleteLevel(index));
+  insertBreak?.addEventListener('click', () => insertBreakBelow(index));
 }
 
 function renderLevels(levels) {
@@ -149,7 +246,7 @@ function renderLevels(levels) {
     const isBreak = Boolean(level.isBreak);
 
     const row = document.createElement('tr');
-    row.className = isBreak ? 'break-row' : '';
+    row.className = isBreak ? 'break-row draggable-item' : 'draggable-item';
     row.innerHTML = `
       <td>${isBreak ? 'BREAK' : index + 1}</td>
       <td><input type="number" min="1" value="${toDurationMin(level.durationSec)}" data-field="durationMin" /></td>
@@ -160,10 +257,12 @@ function renderLevels(levels) {
       <td class="level-actions">
         <button data-action="up">↑</button>
         <button data-action="down">↓</button>
+        <button data-action="insertBreak">+Break</button>
         <button data-action="delete" class="danger">Delete</button>
       </td>
     `;
 
+    bindDragHandlers(row, index);
     createCommonActions(row, index);
 
     row.querySelectorAll('input[data-field]').forEach((input) => {
@@ -181,7 +280,7 @@ function renderLevels(levels) {
     ui.levelsTableBody.appendChild(row);
 
     const card = document.createElement('div');
-    card.className = `level-card-mobile ${isBreak ? 'break-row' : ''}`;
+    card.className = `level-card-mobile draggable-item ${isBreak ? 'break-row' : ''}`;
     card.innerHTML = `
       <h3>${isBreak ? `BREAK ${index + 1}` : `Level ${index + 1}`}</h3>
       <label>Duration (min)<input type="number" min="1" value="${toDurationMin(level.durationSec)}" data-card-field="durationMin" /></label>
@@ -191,10 +290,12 @@ function renderLevels(levels) {
       <div class="level-actions">
         <button data-action="up">↑</button>
         <button data-action="down">↓</button>
+        <button data-action="insertBreak">+Break</button>
         <button data-action="delete" class="danger">Delete</button>
       </div>
     `;
 
+    bindDragHandlers(card, index);
     createCommonActions(card, index);
 
     card.querySelectorAll('input[data-card-field]').forEach((input) => {
@@ -213,11 +314,28 @@ function renderLevels(levels) {
   });
 }
 
+function applyStructurePreset(key) {
+  const preset = STRUCTURE_PRESETS[key];
+  if (!preset || key === 'custom' || !localState) {
+    return;
+  }
+
+  localState.levels = preset.levels.map((level) => ({ ...level }));
+  if (preset.startingStack) {
+    ui.startingStack.value = preset.startingStack;
+  }
+  ui.structurePreset.value = key;
+  emitInitState(localState.levels);
+}
+
 function collectState() {
   return {
     tournamentName: ui.tournamentName.value,
     subtitle: ui.subtitle.value,
+    structurePreset: ui.structurePreset.value,
     lateRegEndLevel: Math.max(0, Number(ui.lateRegEndLevel.value) || 0),
+    payoutPreset: ui.payoutPreset.value,
+    showPayouts: ui.showPayouts.checked,
     levels: localState ? localState.levels : [],
     playersTotal: Number(ui.playersTotal.value),
     playersLeft: Number(ui.playersLeft.value),
@@ -229,6 +347,10 @@ function collectState() {
     showAvgStack: ui.showAvgStack.checked,
     alertSeconds: parseAlertSeconds(ui.alertTimes.value),
     soundsEnabled: ui.soundsEnabled.checked,
+    enableAlerts: ui.enableAlerts.checked,
+    enableLevelChangeSound: ui.enableLevelChangeSound.checked,
+    enableBreakSounds: ui.enableBreakSounds.checked,
+    soundVolume: Number(ui.soundVolume.value),
     soundMap: {
       alert60: document.getElementById('sound-alert60').value,
       alert10: document.getElementById('sound-alert10').value,
@@ -271,7 +393,10 @@ socket.on('state:update', (state) => {
 
   ui.tournamentName.value = state.tournamentName || '';
   ui.subtitle.value = state.subtitle || '';
+  ui.structurePreset.value = state.structurePreset || 'default';
   ui.lateRegEndLevel.value = state.lateRegEndLevel || 0;
+  ui.payoutPreset.value = state.payoutPreset || 'auto';
+  ui.showPayouts.checked = Boolean(state.showPayouts);
   ui.startingStack.value = state.startingStack || 0;
   ui.addonStack.value = state.addonStack || 0;
   ui.playersTotal.value = state.playersTotal;
@@ -281,7 +406,12 @@ socket.on('state:update', (state) => {
   ui.alertTimes.value = (state.alertSeconds || []).join(',');
   ui.showChipsInPlay.checked = Boolean(state.showChipsInPlay);
   ui.showAvgStack.checked = Boolean(state.showAvgStack);
+
   ui.soundsEnabled.checked = Boolean(state.soundsEnabled);
+  ui.enableAlerts.checked = Boolean(state.enableAlerts);
+  ui.enableLevelChangeSound.checked = Boolean(state.enableLevelChangeSound);
+  ui.enableBreakSounds.checked = Boolean(state.enableBreakSounds);
+  ui.soundVolume.value = typeof state.soundVolume === 'number' ? state.soundVolume : 0.5;
 
   ['alert60', 'alert10', 'levelChange', 'breakStart', 'breakEnd'].forEach((eventName) => {
     document.getElementById(`sound-${eventName}`).value = state.soundMap?.[eventName] || 'beep3';
@@ -306,6 +436,8 @@ function setupInputListeners() {
     ui.tournamentName,
     ui.subtitle,
     ui.lateRegEndLevel,
+    ui.payoutPreset,
+    ui.showPayouts,
     ui.startingStack,
     ui.addonStack,
     ui.playersTotal,
@@ -316,6 +448,10 @@ function setupInputListeners() {
     ui.showChipsInPlay,
     ui.showAvgStack,
     ui.soundsEnabled,
+    ui.enableAlerts,
+    ui.enableLevelChangeSound,
+    ui.enableBreakSounds,
+    ui.soundVolume,
     ui.backgroundPreset,
     ui.overlayDim,
     ui.themeSelect,
@@ -326,6 +462,14 @@ function setupInputListeners() {
     document.getElementById('sound-breakEnd')
   ].forEach((input) => {
     input.addEventListener('change', emitUpdateState);
+  });
+
+  ui.structurePreset.addEventListener('change', () => {
+    if (ui.structurePreset.value === 'custom') {
+      emitUpdateState();
+      return;
+    }
+    applyStructurePreset(ui.structurePreset.value);
   });
 }
 
@@ -349,7 +493,8 @@ document.getElementById('addLevelBtn').addEventListener('click', () => {
   if (!localState) {
     return;
   }
-  localState.levels.push({ durationSec: 900, sb: 500, bb: 1000, ante: 100, isBreak: false });
+  localState.levels.push({ durationSec: 900, sb: 500, bb: 1000, ante: 0, isBreak: false });
+  ui.structurePreset.value = 'custom';
   emitInitState(localState.levels);
 });
 
@@ -357,7 +502,8 @@ document.getElementById('addBreakBtn').addEventListener('click', () => {
   if (!localState) {
     return;
   }
-  localState.levels.push({ durationSec: 300, sb: 0, bb: 0, ante: 0, isBreak: true });
+  localState.levels.push({ durationSec: 600, sb: 0, bb: 0, ante: 0, isBreak: true });
+  ui.structurePreset.value = 'custom';
   emitInitState(localState.levels);
 });
 
@@ -399,9 +545,11 @@ document.getElementById('stickySave').addEventListener('click', () => {
 
 document.querySelectorAll('[data-test-sound]').forEach((btn) => {
   btn.addEventListener('click', () => {
+    const type = btn.dataset.testSound;
     socket.emit('sound:event', {
-      type: btn.dataset.testSound,
-      soundId: document.getElementById(`sound-${btn.dataset.testSound}`).value
+      type,
+      soundId: document.getElementById(`sound-${type}`).value,
+      volume: Number(ui.soundVolume.value)
     });
   });
 });
@@ -422,3 +570,4 @@ function restoreFromLocalStorage() {
 initSelects();
 setupInputListeners();
 restoreFromLocalStorage();
+
